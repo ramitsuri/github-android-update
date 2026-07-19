@@ -55,7 +55,7 @@ afterEvaluate {
         repositories {
             maven {
                 name = "GitHubPackages"
-                url = uri("https://maven.pkg.github.com/ramitsuri/GitHubAndroidUpdate")
+                url = uri("https://maven.pkg.github.com/ramitsuri/github-android-update")
                 credentials {
                     username = System.getenv("GITHUB_ACTOR")
                     password = System.getenv("GITHUB_TOKEN")
