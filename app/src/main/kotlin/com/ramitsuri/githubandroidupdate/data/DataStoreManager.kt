@@ -22,10 +22,15 @@ class DataStoreManager(context: Context) {
 
     val trackedRepos: Flow<List<TrackedRepo>> = context.dataStore.data.map { preferences ->
         val reposJson = preferences[reposKey] ?: "[]"
-        try {
-            Json.decodeFromString<List<TrackedRepo>>(reposJson)
-        } catch (e: Exception) {
+        val repos = try {
+            Json.decodeFromString<List<TrackedRepo>>(reposJson).toMutableList()
+        } catch (_: Exception) {
             emptyList()
+        }
+        if (repos.none { it.owner == SELF_OWNER && it.name == SELF_REPO }) {
+            listOf(TrackedRepo(SELF_OWNER, SELF_REPO)) + repos
+        } else {
+            repos
         }
     }
 
@@ -67,5 +72,10 @@ class DataStoreManager(context: Context) {
             currentRepos.removeAll { it.owner == owner && it.name == name }
             preferences[reposKey] = Json.encodeToString(currentRepos)
         }
+    }
+
+    companion object {
+        const val SELF_OWNER = "ramitsuri"
+        const val SELF_REPO = "github-android-update"
     }
 }

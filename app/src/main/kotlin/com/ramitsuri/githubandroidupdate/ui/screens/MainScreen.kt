@@ -52,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.ramitsuri.githubandroidupdate.data.DataStoreManager
 import com.ramitsuri.githubandroidupdate.data.model.TrackedRepo
 import com.ramitsuri.githubandroidupdate.viewmodel.MainViewModel
 import java.time.Instant
@@ -121,8 +122,11 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                 verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
             ) {
                 items(state.trackedRepos, key = { it.fullName }) { repo ->
+                    val isSelfRepo = repo.owner == DataStoreManager.SELF_OWNER &&
+                            repo.name == DataStoreManager.SELF_REPO
                     TrackedRepoCard(
                         repo = repo,
+                        isSelfRepo = isSelfRepo,
                         progress = state.downloadProgress[repo.fullName],
                         onRefresh = { viewModel.checkForUpdates(repo.owner, repo.name) },
                         onDownload = { viewModel.downloadAndInstall(repo) },
@@ -172,111 +176,152 @@ fun InstallPermissionCard() {
 @Composable
 fun TrackedRepoCard(
     repo: TrackedRepo,
+    isSelfRepo: Boolean,
     progress: Float?,
     onRefresh: () -> Unit,
     onDownload: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val dismissState = rememberSwipeToDismissBoxState()
+    if (isSelfRepo) {
+        TrackedRepoCardContent(
+            repo = repo,
+            isSelfRepo = true,
+            progress = progress,
+            onRefresh = onRefresh,
+            onDownload = onDownload
+        )
+    } else {
+        val dismissState = rememberSwipeToDismissBoxState()
 
-    SwipeToDismissBox(
-        state = dismissState,
-        onDismiss = {
-            onDelete()
-        },
-        enableDismissFromStartToEnd = false,
-        backgroundContent = {
-            val color = when (dismissState.dismissDirection) {
-                SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.errorContainer
-                else -> Color.Transparent
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(color, CardDefaults.shape)
-                    .padding(horizontal = 24.dp),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Delete",
-                    tint = MaterialTheme.colorScheme.onErrorContainer
-                )
-            }
-        }
-    ) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            repo.owner,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                        Text(
-                            repo.name,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        repo.latestReleaseVersion?.let { version ->
-                            val dateText = remember(repo.latestReleaseTimestamp) {
-                                repo.latestReleaseTimestamp?.let {
-                                    DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
-                                        .withZone(ZoneId.systemDefault())
-                                        .format(Instant.ofEpochMilli(it))
-                                }
-                            }
-                            Text(
-                                text = version,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                            if (dateText != null) {
-                                Text(
-                                    text = dateText,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                            }
-                        }
-                    }
-                    if (repo.hasUpdate) {
-                        Text(
-                            "Update",
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 12.dp),
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-                    Row {
-                        IconButton(onClick = onRefresh, enabled = progress == null) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Check for updates")
-                        }
-                        if (repo.hasUpdate || repo.latestReleaseVersion != null) {
-                            IconButton(onClick = onDownload, enabled = progress == null) {
-                                Icon(
-                                    Icons.Default.Download,
-                                    contentDescription = "Download and Install"
-                                )
-                            }
-                        }
-                    }
+        SwipeToDismissBox(
+            state = dismissState,
+            onDismiss = {
+                onDelete()
+            },
+            enableDismissFromStartToEnd = false,
+            backgroundContent = {
+                val color = when (dismissState.dismissDirection) {
+                    SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.errorContainer
+                    else -> Color.Transparent
                 }
-                if (progress != null) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    LinearProgressIndicator(
-                        progress = { progress },
-                        modifier = Modifier.fillMaxWidth(),
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(color, CardDefaults.shape)
+                        .padding(horizontal = 24.dp),
+                    contentAlignment = Alignment.CenterEnd
+                ) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.onErrorContainer
                     )
                 }
+            }
+        ) {
+            TrackedRepoCardContent(
+                repo = repo,
+                isSelfRepo = false,
+                progress = progress,
+                onRefresh = onRefresh,
+                onDownload = onDownload
+            )
+        }
+    }
+}
+
+@Composable
+fun TrackedRepoCardContent(
+    repo: TrackedRepo,
+    isSelfRepo: Boolean,
+    progress: Float?,
+    onRefresh: () -> Unit,
+    onDownload: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = if (isSelfRepo) {
+            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        } else {
+            CardDefaults.cardColors()
+        }
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        if (isSelfRepo) "This App" else repo.owner,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (isSelfRepo) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.secondary
+                        }
+                    )
+                    Text(
+                        repo.name,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    repo.latestReleaseVersion?.let { version ->
+                        val dateText = remember(repo.latestReleaseTimestamp) {
+                            repo.latestReleaseTimestamp?.let {
+                                DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
+                                    .withZone(ZoneId.systemDefault())
+                                    .format(Instant.ofEpochMilli(it))
+                            }
+                        }
+                        Text(
+                            text = version,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        if (dateText != null) {
+                            Text(
+                                text = dateText,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
+                }
+                if (repo.hasUpdate) {
+                    Text(
+                        "Update",
+                        color = if (isSelfRepo) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                Row {
+                    IconButton(onClick = onRefresh, enabled = progress == null) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Check for updates")
+                    }
+                    if (repo.hasUpdate || repo.latestReleaseVersion != null) {
+                        IconButton(onClick = onDownload, enabled = progress == null) {
+                            Icon(
+                                Icons.Default.Download,
+                                contentDescription = "Download and Install"
+                            )
+                        }
+                    }
+                }
+            }
+            if (progress != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }
