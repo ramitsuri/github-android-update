@@ -40,7 +40,10 @@ class GitHubUpdateChecker(
         }
     }
 
-    suspend fun downloadAndInstall(release: GitHubRelease.Release): String? {
+    suspend fun downloadAndInstall(
+        release: GitHubRelease.Release,
+        authToken: String? = null,
+    ): String? {
         val asset = release.assets.find { it.name.endsWith(".apk") }
         if (asset == null) {
             Log.e(TAG, "No APK asset found in release")
@@ -50,7 +53,12 @@ class GitHubUpdateChecker(
         try {
             File(context.cacheDir, DOWNLOAD_DIR).mkdirs()
             val file = File(context.cacheDir, "$DOWNLOAD_DIR/${asset.name}")
-            api.downloadAndSave(url = asset.downloadUrl, toFile = file)
+            val downloadUrl = if (!authToken.isNullOrBlank()) {
+                asset.apiUrl
+            } else {
+                asset.downloadUrl
+            }
+            api.downloadAndSave(url = downloadUrl, toFile = file, authToken = authToken)
             val uri: Uri =
                 FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
             val intent = Intent(Intent.ACTION_VIEW).apply {

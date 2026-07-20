@@ -22,6 +22,9 @@ sealed interface GitHubRelease {
             @SerialName("name")
             val name: String,
 
+            @SerialName("url")
+            val apiUrl: String,
+
             @SerialName("browser_download_url")
             val downloadUrl: String,
         )
