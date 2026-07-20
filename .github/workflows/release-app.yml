@@ -28,8 +28,20 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
+      - name: Generate Version
+        id: version
+        run: |
+          # Calculate minutes since 2026-01-01 00:00:00 UTC
+          # 1767243600 is the Unix timestamp for 1767243600000L
+          NOW=$(date +%s)
+          BASE=1767243600
+          VERSION_CODE=$(( (NOW - BASE) / 60 ))
+          VERSION_NAME="1.0.$VERSION_CODE"
+          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_OUTPUT
+
       - name: Generate Release Apk
-        run: ./gradlew :app:assembleRelease
+        run: ./gradlew :app:assembleRelease -PVERSION_CODE=${{ steps.version.outputs.VERSION_CODE }} -PVERSION_NAME=${{ steps.version.outputs.VERSION_NAME }}
 
       - name: Sign Apk
         uses: r0adkll/sign-android-release@v1
@@ -43,17 +55,13 @@ jobs:
         env:
           BUILD_TOOLS_VERSION: "34.0.0"
 
-      - name: Get Version Name
-        id: get_version
-        run: |
-          echo "RELEASE_TAG=v$(date +'%Y%m%d.%H%M%S')" >> $GITHUB_ENV
-
       - name: Create GitHub Release
-        uses: marvinpinto/action-automatic-releases@latest
+        uses: softprops/action-gh-release@v2
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: v${{ steps.version.outputs.VERSION_NAME }}
+          name: Release ${{ steps.version.outputs.VERSION_NAME }}
+          files: ${{ steps.sign_apk.outputs.signedReleaseFile }}
+          draft: false
           prerelease: false
-          automatic_release_tag: "${{ env.RELEASE_TAG }}"
-          title: "Release v${{ env.RELEASE_TAG }}"
-          files: |
-            ${{ steps.sign_apk.outputs.signedReleaseFile }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

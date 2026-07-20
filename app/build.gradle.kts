@@ -4,9 +4,9 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-// Generates a version code based on minutes since 2026-01-01.
-val autoVersionCode = ((System.currentTimeMillis() - 1767243600000L) / 60000L).toInt()
-val autoVersionName = "1.0.$autoVersionCode"
+// Can be overridden by project properties VERSION_CODE and VERSION_NAME (e.g. from CI).
+val autoVersionCode = project.findProperty("VERSION_CODE")?.toString()?.toIntOrNull() ?: 1
+val autoVersionName = project.findProperty("VERSION_NAME")?.toString() ?: "1.0.0"
 
 android {
     namespace = "com.ramitsuri.githubandroidupdate"
