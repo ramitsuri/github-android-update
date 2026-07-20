@@ -7,6 +7,8 @@ import android.util.Log
 import androidx.core.content.FileProvider
 import com.ramitsuri.githubandroidupdate.updatechecker.lib.model.GitHubRelease
 import com.ramitsuri.githubandroidupdate.updatechecker.lib.network.GithubApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
 import java.io.File
 import kotlin.time.Instant
 
@@ -40,14 +42,14 @@ class GitHubUpdateChecker(
         }
     }
 
-    suspend fun downloadAndInstall(
+    fun downloadAndInstall(
         release: GitHubRelease.Release,
-        authToken: String? = null,
-    ): String? {
+        authToken: String? = null
+    ): Flow<Float> = channelFlow {
         val asset = release.assets.find { it.name.endsWith(".apk") }
         if (asset == null) {
             Log.e(TAG, "No APK asset found in release")
-            return "No APK asset found in release"
+            throw Exception("No APK asset found in release")
         }
 
         try {
@@ -58,7 +60,14 @@ class GitHubUpdateChecker(
             } else {
                 asset.downloadUrl
             }
-            api.downloadAndSave(url = downloadUrl, toFile = file, authToken = authToken)
+            api.downloadAndSave(
+                url = downloadUrl,
+                toFile = file,
+                authToken = authToken,
+                onProgress = { progress ->
+                    trySend(progress)
+                }
+            )
             val uri: Uri =
                 FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
             val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -69,9 +78,8 @@ class GitHubUpdateChecker(
             context.startActivity(intent)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to download update: ${e.message}")
-            return "Failed to download update: ${e.message}"
+            throw e
         }
-        return null
     }
 
     companion object {

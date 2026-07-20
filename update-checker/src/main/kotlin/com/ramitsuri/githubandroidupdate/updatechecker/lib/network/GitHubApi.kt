@@ -8,6 +8,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
+import io.ktor.client.plugins.onDownload
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
@@ -72,12 +73,18 @@ internal class GithubApi() {
     suspend fun downloadAndSave(
         url: String,
         toFile: File,
-        authToken: String? = null
+        authToken: String? = null,
+        onProgress: ((Float) -> Unit)? = null
     ) {
         downloadClient.prepareGet(url) {
             header(HttpHeaders.Accept, "application/octet-stream")
             if (!authToken.isNullOrBlank()) {
                 header(HttpHeaders.Authorization, "Bearer $authToken")
+            }
+            onDownload { bytesSentTotal, contentLength ->
+                if (contentLength != null && contentLength > 0) {
+                    onProgress?.invoke(bytesSentTotal.toFloat() / contentLength)
+                }
             }
         }.execute { resp ->
             if (resp.status.isSuccess()) {

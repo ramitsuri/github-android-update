@@ -1,14 +1,7 @@
-import org.gradle.api.publish.PublishingExtension
-import org.gradle.api.publish.maven.MavenPublication
-
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.serialization)
-    id("maven-publish")
 }
-
-val autoVersionCode = ((System.currentTimeMillis() - 1767243600000L) / 60000L).toInt()
-val autoVersionName = "1.0.$autoVersionCode"
 
 android {
     namespace = "com.ramitsuri.githubandroidupdate.updatechecker"
@@ -33,35 +26,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
-    }
-
-    publishing {
-        singleVariant("release") {
-            withSourcesJar()
-        }
-    }
-}
-
-afterEvaluate {
-    configure<PublishingExtension> {
-        publications {
-            register<MavenPublication>("release") {
-                from(components["release"])
-                groupId = "com.ramitsuri.githubandroidupdate"
-                artifactId = "update-checker"
-                version = autoVersionName
-            }
-        }
-        repositories {
-            maven {
-                name = "GitHubPackages"
-                url = uri("https://maven.pkg.github.com/ramitsuri/github-android-update")
-                credentials {
-                    username = System.getenv("GITHUB_ACTOR")
-                    password = System.getenv("GITHUB_TOKEN")
-                }
-            }
-        }
     }
 }
 

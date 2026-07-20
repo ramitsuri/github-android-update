@@ -4,6 +4,10 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Generates a version code based on minutes since 2026-01-01.
+val autoVersionCode = ((System.currentTimeMillis() - 1767243600000L) / 60000L).toInt()
+val autoVersionName = "1.0.$autoVersionCode"
+
 android {
     namespace = "com.ramitsuri.githubandroidupdate"
     compileSdk = 37
@@ -12,8 +16,8 @@ android {
         applicationId = "com.ramitsuri.githubandroidupdate"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = autoVersionCode
+        versionName = autoVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -41,6 +45,7 @@ dependencies {
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
@@ -49,6 +54,9 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.material)
     implementation(libs.androidx.material.icons.extended)
+
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.work.runtime.ktx)
 
     // Navigation 3
     implementation(libs.androidx.navigation3.runtime)
