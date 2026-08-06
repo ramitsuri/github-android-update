@@ -27,14 +27,15 @@ class UpdateWorker(
                 owner = repo.owner,
                 repo = repo.name,
                 authToken = pat,
-                lastCheckedTimestamp = lastTimestamp
+                lastCheckedTimestamp = lastTimestamp,
             )
 
             if (release is GitHubRelease.Release) {
+                val hasUpdate = lastTimestamp != null && release.createdAt > lastTimestamp
                 repo.copy(
                     latestReleaseVersion = release.name,
                     latestReleaseTimestamp = release.createdAt.toEpochMilliseconds(),
-                    hasUpdate = true
+                    hasUpdate = hasUpdate,
                 )
             } else {
                 repo

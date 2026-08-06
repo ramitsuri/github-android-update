@@ -3,8 +3,10 @@ package com.ramitsuri.githubandroidupdate.ui.screens
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,6 +21,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -39,7 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,9 +53,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.core.net.toUri
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.ramitsuri.githubandroidupdate.data.DataStoreManager
 import com.ramitsuri.githubandroidupdate.data.model.TrackedRepo
 import com.ramitsuri.githubandroidupdate.viewmodel.MainViewModel
 import java.time.Instant
@@ -63,12 +67,15 @@ import java.time.format.FormatStyle
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(viewModel: MainViewModel = viewModel()) {
-    val state by viewModel.uiState.collectAsState()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
     var showAddRepoDialog by remember { mutableStateOf(false) }
     var showPatDialog by remember { mutableStateOf(false) }
+    var selfRepoInfoToShow: TrackedRepo? by remember { mutableStateOf(null) }
 
-    if (state.isLoaded && state.pat == null) {
-        PatDialog(onConfirm = { viewModel.savePat(it) })
+    LaunchedEffect(state.isLoaded, state.pat) {
+        if (state.isLoaded && state.pat == null) {
+            showPatDialog = true
+        }
     }
 
     if (showPatDialog) {
@@ -92,11 +99,25 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
         )
     }
 
+    selfRepoInfoToShow?.let { selfRepo ->
+        SelfRepoInfoDialog(
+            selfRepo = selfRepo,
+            onDismiss = { selfRepoInfoToShow = null },
+            onRefresh = { viewModel.checkForUpdates(selfRepo.owner, selfRepo.name) },
+            onDownload = { viewModel.downloadAndInstall(selfRepo) },
+        )
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("GitHub Update") },
                 actions = {
+                    if (state.selfRepo != null) {
+                        IconButton(onClick = { selfRepoInfoToShow = state.selfRepo }) {
+                            Icon(Icons.Rounded.Info, contentDescription = "Show app info")
+                        }
+                    }
                     IconButton(onClick = { showPatDialog = true }) {
                         Icon(Icons.Rounded.Key, contentDescription = "Edit PAT")
                     }
@@ -118,15 +139,12 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(state.trackedRepos, key = { it.fullName }) { repo ->
-                    val isSelfRepo = repo.owner == DataStoreManager.SELF_OWNER &&
-                            repo.name == DataStoreManager.SELF_REPO
                     TrackedRepoCard(
                         repo = repo,
-                        isSelfRepo = isSelfRepo,
                         progress = state.downloadProgress[repo.fullName],
                         onRefresh = { viewModel.checkForUpdates(repo.owner, repo.name) },
                         onDownload = { viewModel.downloadAndInstall(repo) },
@@ -139,7 +157,7 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
 }
 
 @Composable
-fun InstallPermissionCard() {
+private fun InstallPermissionCard() {
     val context = LocalContext.current
     var hasPermission by remember {
         mutableStateOf(context.packageManager.canRequestPackageInstalls())
@@ -174,66 +192,53 @@ fun InstallPermissionCard() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TrackedRepoCard(
+private fun TrackedRepoCard(
     repo: TrackedRepo,
-    isSelfRepo: Boolean,
     progress: Float?,
     onRefresh: () -> Unit,
     onDownload: () -> Unit,
     onDelete: () -> Unit
 ) {
-    if (isSelfRepo) {
+    val dismissState = rememberSwipeToDismissBoxState()
+
+    SwipeToDismissBox(
+        state = dismissState,
+        onDismiss = {
+            onDelete()
+        },
+        enableDismissFromStartToEnd = false,
+        backgroundContent = {
+            val color = when (dismissState.dismissDirection) {
+                SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.errorContainer
+                else -> Color.Transparent
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(color, CardDefaults.shape)
+                    .padding(horizontal = 24.dp),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Delete",
+                    tint = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+        }
+    ) {
         TrackedRepoCardContent(
             repo = repo,
-            isSelfRepo = true,
             progress = progress,
             onRefresh = onRefresh,
             onDownload = onDownload
         )
-    } else {
-        val dismissState = rememberSwipeToDismissBoxState()
-
-        SwipeToDismissBox(
-            state = dismissState,
-            onDismiss = {
-                onDelete()
-            },
-            enableDismissFromStartToEnd = false,
-            backgroundContent = {
-                val color = when (dismissState.dismissDirection) {
-                    SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.errorContainer
-                    else -> Color.Transparent
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(color, CardDefaults.shape)
-                        .padding(horizontal = 24.dp),
-                    contentAlignment = Alignment.CenterEnd
-                ) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Delete",
-                        tint = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                }
-            }
-        ) {
-            TrackedRepoCardContent(
-                repo = repo,
-                isSelfRepo = false,
-                progress = progress,
-                onRefresh = onRefresh,
-                onDownload = onDownload
-            )
-        }
     }
 }
 
 @Composable
-fun TrackedRepoCardContent(
+private fun TrackedRepoCardContent(
     repo: TrackedRepo,
-    isSelfRepo: Boolean,
     progress: Float?,
     onRefresh: () -> Unit,
     onDownload: () -> Unit
@@ -241,27 +246,19 @@ fun TrackedRepoCardContent(
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = if (isSelfRepo) {
-            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-        } else {
-            CardDefaults.cardColors()
-        }
+        colors = CardDefaults.cardColors()
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        if (isSelfRepo) "This App" else repo.owner,
+                        text = repo.owner,
                         style = MaterialTheme.typography.labelLarge,
-                        color = if (isSelfRepo) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.secondary
-                        }
+                        color = MaterialTheme.colorScheme.secondary
                     )
                     Text(
                         repo.name,
@@ -292,11 +289,7 @@ fun TrackedRepoCardContent(
                 if (repo.hasUpdate) {
                     Text(
                         "Update",
-                        color = if (isSelfRepo) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.primary
-                        },
+                        color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 12.dp),
                         style = MaterialTheme.typography.titleMedium
@@ -328,7 +321,7 @@ fun TrackedRepoCardContent(
 }
 
 @Composable
-fun PatDialog(
+private fun PatDialog(
     initialPat: String = "",
     onConfirm: (String) -> Unit,
     onDismiss: (() -> Unit)? = null
@@ -364,11 +357,11 @@ fun PatDialog(
 }
 
 @Composable
-fun AddRepoDialog(
+private fun AddRepoDialog(
     onConfirm: (String, String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val ownerState = rememberTextFieldState()
+    val ownerState = rememberTextFieldState(initialText = "ramitsuri")
     val nameState = rememberTextFieldState()
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -401,4 +394,23 @@ fun AddRepoDialog(
             }
         }
     )
+}
+
+@Composable
+private fun SelfRepoInfoDialog(
+    selfRepo: TrackedRepo,
+    onDismiss: () -> Unit,
+    onRefresh: () -> Unit,
+    onDownload: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+    ) {
+        TrackedRepoCardContent(
+            repo = selfRepo,
+            progress = null,
+            onRefresh = onRefresh,
+            onDownload = onDownload,
+        )
+    }
 }

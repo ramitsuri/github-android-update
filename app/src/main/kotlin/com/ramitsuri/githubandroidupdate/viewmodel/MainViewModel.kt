@@ -26,8 +26,9 @@ import kotlin.time.Instant
 data class MainUiState(
     val pat: String? = null,
     val trackedRepos: List<TrackedRepo> = emptyList(),
+    val selfRepo: TrackedRepo? = null,
     val downloadProgress: Map<String, Float> = emptyMap(),
-    val isLoaded: Boolean = false
+    val isLoaded: Boolean = false,
 )
 
 class MainViewModel(private val application: Application) : AndroidViewModel(application) {
@@ -36,13 +37,21 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 
     private val _downloadProgress = MutableStateFlow<Map<String, Float>>(emptyMap())
 
+    init {
+        viewModelScope.launch {
+            dataStoreManager.migrate()
+        }
+    }
+
     val uiState: StateFlow<MainUiState> = combine(
         dataStoreManager.pat,
         dataStoreManager.trackedRepos,
-        _downloadProgress
-    ) { pat, trackedRepos, downloadProgress ->
+        dataStoreManager.selfRepo,
+        _downloadProgress,
+    ) { pat, trackedRepos, selfRepo, downloadProgress ->
         MainUiState(
             pat = pat,
+            selfRepo = selfRepo,
             trackedRepos = trackedRepos,
             downloadProgress = downloadProgress,
             isLoaded = true
@@ -78,20 +87,26 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 
     fun checkForUpdates(owner: String, name: String) {
         viewModelScope.launch {
-            val patValue = uiState.value.pat
+            val pat = uiState.value.pat
             val currentRepos = uiState.value.trackedRepos.toMutableList()
             val repoIndex = currentRepos.indexOfFirst { it.owner == owner && it.name == name }
             if (repoIndex == -1) return@launch
 
             val repo = currentRepos[repoIndex]
             val lastTimestamp = repo.latestReleaseTimestamp?.let { Instant.fromEpochMilliseconds(it) }
-            val release = updateChecker.checkForUpdates(owner, name, patValue, lastTimestamp)
+            val release = updateChecker.checkForUpdates(
+                owner = repo.owner,
+                repo = repo.name,
+                authToken = pat,
+                lastCheckedTimestamp = lastTimestamp,
+            )
 
             if (release is GitHubRelease.Release) {
+                val hasUpdate = lastTimestamp != null && release.createdAt > lastTimestamp
                 currentRepos[repoIndex] = repo.copy(
                     latestReleaseVersion = release.name,
                     latestReleaseTimestamp = release.createdAt.toEpochMilliseconds(),
-                    hasUpdate = lastTimestamp != null && release.createdAt > lastTimestamp
+                    hasUpdate = hasUpdate,
                 )
                 dataStoreManager.saveTrackedRepos(currentRepos)
             }
