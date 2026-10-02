@@ -52,7 +52,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         MainUiState(
             pat = pat,
             selfRepo = selfRepo,
-            trackedRepos = trackedRepos,
+            trackedRepos = trackedRepos.sortedByDescending { it.hasUpdate },
             downloadProgress = downloadProgress,
             isLoaded = true
         )
