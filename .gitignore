@@ -16,4 +16,5 @@ local.properties
 .idea
 .agent
 app/build
+wear/build
 update-checker/build

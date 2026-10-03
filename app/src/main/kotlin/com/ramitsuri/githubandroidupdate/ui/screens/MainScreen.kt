@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material3.AlertDialog
@@ -90,6 +91,7 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
         onAddRepo = viewModel::addRepo,
         onCheckForUpdates = viewModel::checkForUpdates,
         onDownloadAndInstall = viewModel::downloadAndInstall,
+        onDownloadAndInstallOnWatch = viewModel::downloadAndInstallOnWatch,
         onRemoveRepo = viewModel::removeRepo,
     )
 }
@@ -102,6 +104,7 @@ fun MainScreen(
     onAddRepo: (String, String) -> Unit,
     onCheckForUpdates: (String, String) -> Unit,
     onDownloadAndInstall: (TrackedRepo) -> Unit,
+    onDownloadAndInstallOnWatch: (TrackedRepo) -> Unit,
     onRemoveRepo: (TrackedRepo) -> Unit,
 ) {
     var showAddRepoDialog by remember { mutableStateOf(false) }
@@ -184,6 +187,7 @@ fun MainScreen(
                         progress = state.downloadProgress[repo.fullName],
                         onRefresh = { onCheckForUpdates(repo.owner, repo.name) },
                         onDownload = { onDownloadAndInstall(repo) },
+                        onDownloadOnWatch = { onDownloadAndInstallOnWatch(repo) },
                         onDelete = { onRemoveRepo(repo) }
                     )
                 }
@@ -241,6 +245,7 @@ private fun TrackedRepoCard(
     progress: Float?,
     onRefresh: () -> Unit,
     onDownload: () -> Unit,
+    onDownloadOnWatch: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val dismissState = rememberSwipeToDismissBoxState()
@@ -275,7 +280,8 @@ private fun TrackedRepoCard(
             repo = repo,
             progress = progress,
             onRefresh = onRefresh,
-            onDownload = onDownload
+            onDownload = onDownload,
+            onDownloadOnWatch = onDownloadOnWatch
         )
     }
 }
@@ -286,6 +292,7 @@ private fun TrackedRepoCardContent(
     progress: Float?,
     onRefresh: () -> Unit,
     onDownload: () -> Unit,
+    onDownloadOnWatch: () -> Unit = {},
 ) {
     val borderModifier = if (repo.hasUpdate) {
         val borderColor = rememberInfiniteTransition(label = "updateBorder").animateColor(
@@ -367,6 +374,14 @@ private fun TrackedRepoCardContent(
                 Row {
                     IconButton(onClick = onRefresh, enabled = progress == null) {
                         Icon(Icons.Default.Refresh, contentDescription = "Check for updates")
+                    }
+                    if (repo.hasWearUpdate) {
+                        IconButton(onClick = onDownloadOnWatch, enabled = progress == null) {
+                            Icon(
+                                Icons.Default.Watch,
+                                contentDescription = "Install on Watch"
+                            )
+                        }
                     }
                     if (repo.hasUpdate || repo.latestReleaseVersion != null) {
                         IconButton(onClick = onDownload, enabled = progress == null) {
@@ -531,6 +546,7 @@ private fun MainScreenPreview() {
             onAddRepo = { _, _ -> },
             onCheckForUpdates = { _, _ -> },
             onDownloadAndInstall = {},
+            onDownloadAndInstallOnWatch = {},
             onRemoveRepo = {},
         )
     }

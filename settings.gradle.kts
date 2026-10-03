@@ -25,3 +25,4 @@ dependencyResolutionManagement {
 rootProject.name = "GitHubAndroidUpdate"
 include(":app")
 include(":update-checker")
+include(":wear")

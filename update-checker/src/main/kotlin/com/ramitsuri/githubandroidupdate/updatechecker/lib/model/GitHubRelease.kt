@@ -28,6 +28,15 @@ sealed interface GitHubRelease {
             @SerialName("browser_download_url")
             val downloadUrl: String,
         )
+
+        fun getWearAsset(): Asset? {
+            return assets.find { asset ->
+                asset.name.endsWith(".apk", ignoreCase = true) &&
+                        asset.name.contains("wear", ignoreCase = true)
+            }
+        }
+
+        fun hasWearAsset(): Boolean = getWearAsset() != null
     }
 
     @Serializable

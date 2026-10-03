@@ -82,6 +82,39 @@ class GitHubUpdateChecker(
         }
     }
 
+    fun downloadWearApk(
+        release: GitHubRelease.Release,
+        authToken: String? = null
+    ): Flow<Pair<Float, File?>> = channelFlow {
+        val asset = release.getWearAsset()
+        if (asset == null) {
+            Log.e(TAG, "No Wear APK asset found in release")
+            throw Exception("No Wear APK asset found in release")
+        }
+
+        try {
+            File(context.cacheDir, DOWNLOAD_DIR).mkdirs()
+            val file = File(context.cacheDir, "$DOWNLOAD_DIR/${asset.name}")
+            val downloadUrl = if (!authToken.isNullOrBlank()) {
+                asset.apiUrl
+            } else {
+                asset.downloadUrl
+            }
+            api.downloadAndSave(
+                url = downloadUrl,
+                toFile = file,
+                authToken = authToken,
+                onProgress = { progress ->
+                    trySend(Pair(progress, null))
+                }
+            )
+            trySend(Pair(1.0f, file))
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to download Wear update: ${e.message}")
+            throw e
+        }
+    }
+
     companion object {
         private const val TAG = "GitHubUpdateChecker"
         private const val DOWNLOAD_DIR = "app-download"

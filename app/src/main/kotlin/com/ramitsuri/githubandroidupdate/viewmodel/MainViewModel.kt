@@ -1,6 +1,7 @@
 package com.ramitsuri.githubandroidupdate.viewmodel
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.Constraints
@@ -12,6 +13,7 @@ import com.ramitsuri.githubandroidupdate.data.DataStoreManager
 import com.ramitsuri.githubandroidupdate.data.model.TrackedRepo
 import com.ramitsuri.githubandroidupdate.updatechecker.lib.GitHubUpdateChecker
 import com.ramitsuri.githubandroidupdate.updatechecker.lib.model.GitHubRelease
+import com.ramitsuri.githubandroidupdate.wear.WearApkPusher
 import com.ramitsuri.githubandroidupdate.worker.UpdateWorker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -20,6 +22,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.time.Instant
 
@@ -103,10 +106,12 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 
             if (release is GitHubRelease.Release) {
                 val hasUpdate = lastTimestamp != null && release.createdAt > lastTimestamp
+                val hasWearUpdate = release.hasWearAsset()
                 currentRepos[repoIndex] = repo.copy(
                     latestReleaseVersion = release.name,
                     latestReleaseTimestamp = release.createdAt.toEpochMilliseconds(),
                     hasUpdate = hasUpdate,
+                    hasWearUpdate = hasWearUpdate,
                 )
                 dataStoreManager.saveTrackedRepos(currentRepos)
             }
@@ -135,6 +140,36 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
                 if (repoIndex != -1) {
                     currentRepos[repoIndex] = currentRepos[repoIndex].copy(hasUpdate = false)
                     dataStoreManager.saveTrackedRepos(currentRepos)
+                }
+            }
+        }
+    }
+
+    fun downloadAndInstallOnWatch(repo: TrackedRepo) {
+        viewModelScope.launch {
+            val patValue = uiState.value.pat
+            val release = updateChecker.checkForUpdates(repo.owner, repo.name, patValue, null)
+            if (release is GitHubRelease.Release && release.hasWearAsset()) {
+                try {
+                    var lastDownloadedFile: File? = null
+                    updateChecker.downloadWearApk(release, patValue).collect { (downloadProgress, downloadedFile) ->
+                        val mappedProgress = downloadProgress * 0.5f
+                        _downloadProgress.update { it + (repo.fullName to mappedProgress) }
+                        if (downloadedFile != null) {
+                            lastDownloadedFile = downloadedFile
+                        }
+                    }
+
+                    lastDownloadedFile?.let { file ->
+                        WearApkPusher.pushApkToWatch(application.applicationContext, file) { pushProgress ->
+                            val mappedProgress = 0.5f + (pushProgress * 0.5f)
+                            _downloadProgress.update { it + (repo.fullName to mappedProgress) }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("MainViewModel", "Failed watch update: ${e.message}")
+                } finally {
+                    _downloadProgress.update { it - repo.fullName }
                 }
             }
         }
