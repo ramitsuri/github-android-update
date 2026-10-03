@@ -40,14 +40,28 @@ jobs:
           echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_OUTPUT
           echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_OUTPUT
 
-      - name: Generate Release Apk
-        run: ./gradlew :app:assembleRelease -PVERSION_CODE=${{ steps.version.outputs.VERSION_CODE }} -PVERSION_NAME=${{ steps.version.outputs.VERSION_NAME }}
+      - name: Generate Release Apks
+        run: |
+          ./gradlew :app:assembleRelease -PVERSION_CODE=${{ steps.version.outputs.VERSION_CODE }} -PVERSION_NAME=${{ steps.version.outputs.VERSION_NAME }}
+          ./gradlew :wear:assembleRelease -PVERSION_CODE=${{ steps.version.outputs.VERSION_CODE }} -PVERSION_NAME=${{ steps.version.outputs.VERSION_NAME }}
 
-      - name: Sign Apk
+      - name: Sign Phone Apk
         uses: r0adkll/sign-android-release@v1
-        id: sign_apk
+        id: sign_phone_apk
         with:
           releaseDirectory: app/build/outputs/apk/release
+          signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+          alias: ${{ secrets.ALIAS }}
+          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+        env:
+          BUILD_TOOLS_VERSION: "34.0.0"
+
+      - name: Sign Wear Apk
+        uses: r0adkll/sign-android-release@v1
+        id: sign_wear_apk
+        with:
+          releaseDirectory: wear/build/outputs/apk/release
           signingKeyBase64: ${{ secrets.SIGNING_KEY }}
           alias: ${{ secrets.ALIAS }}
           keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
@@ -60,7 +74,9 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.VERSION_NAME }}
           name: Release ${{ steps.version.outputs.VERSION_NAME }}
-          files: ${{ steps.sign_apk.outputs.signedReleaseFile }}
+          files: |
+            ${{ steps.sign_phone_apk.outputs.signedReleaseFile }}
+            ${{ steps.sign_wear_apk.outputs.signedReleaseFile }}
           draft: false
           prerelease: false
         env:
