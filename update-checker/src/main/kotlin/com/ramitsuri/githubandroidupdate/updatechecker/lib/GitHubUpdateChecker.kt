@@ -6,7 +6,11 @@ import android.net.Uri
 import android.util.Log
 import androidx.core.content.FileProvider
 import com.ramitsuri.githubandroidupdate.updatechecker.lib.model.GitHubRelease
+import com.ramitsuri.githubandroidupdate.updatechecker.lib.model.TrackedRepo
 import com.ramitsuri.githubandroidupdate.updatechecker.lib.network.GithubApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import java.io.File
@@ -16,6 +20,43 @@ class GitHubUpdateChecker(
     private val context: Context,
 ) {
     private val api = GithubApi()
+
+    suspend fun checkForUpdates(
+        repos: List<TrackedRepo>,
+        authToken: String? = null,
+    ): List<TrackedRepo> = coroutineScope {
+        repos.map { repo ->
+            async {
+                checkForUpdates(repo, authToken)
+            }
+        }.awaitAll()
+    }
+
+    suspend fun checkForUpdates(
+        repo: TrackedRepo,
+        authToken: String? = null,
+    ): TrackedRepo {
+        val lastTimestamp = repo.latestReleaseTimestamp?.let { Instant.fromEpochMilliseconds(it) }
+        val release = checkForUpdates(
+            owner = repo.owner,
+            repo = repo.name,
+            authToken = authToken,
+            lastCheckedTimestamp = lastTimestamp,
+        )
+
+        return if (release is GitHubRelease.Release) {
+            val hasUpdate = lastTimestamp != null && release.createdAt > lastTimestamp
+            val hasWearUpdate = release.hasWearAsset()
+            repo.copy(
+                latestReleaseVersion = release.name,
+                latestReleaseTimestamp = release.createdAt.toEpochMilliseconds(),
+                hasUpdate = hasUpdate,
+                hasWearUpdate = hasWearUpdate,
+            )
+        } else {
+            repo
+        }
+    }
 
     suspend fun checkForUpdates(
         owner: String,
@@ -112,6 +153,17 @@ class GitHubUpdateChecker(
         } catch (e: Exception) {
             Log.e(TAG, "Failed to download Wear update: ${e.message}")
             throw e
+        }
+    }
+
+    fun cleanupOldDownloads() {
+        val downloadDir = File(context.cacheDir, DOWNLOAD_DIR)
+        if (downloadDir.exists() && downloadDir.isDirectory) {
+            downloadDir.listFiles()?.forEach { file ->
+                if (file.isFile) {
+                    file.delete()
+                }
+            }
         }
     }
 

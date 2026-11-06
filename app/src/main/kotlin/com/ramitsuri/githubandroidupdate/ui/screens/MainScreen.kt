@@ -43,6 +43,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
@@ -93,6 +94,7 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
         onDownloadAndInstall = viewModel::downloadAndInstall,
         onDownloadAndInstallOnWatch = viewModel::downloadAndInstallOnWatch,
         onRemoveRepo = viewModel::removeRepo,
+        onRefresh = viewModel::refreshTrackedRepos,
     )
 }
 
@@ -106,6 +108,7 @@ fun MainScreen(
     onDownloadAndInstall: (TrackedRepo) -> Unit,
     onDownloadAndInstallOnWatch: (TrackedRepo) -> Unit,
     onRemoveRepo: (TrackedRepo) -> Unit,
+    onRefresh: () -> Unit = {},
 ) {
     var showAddRepoDialog by remember { mutableStateOf(false) }
     var showPatDialog by remember { mutableStateOf(false) }
@@ -176,23 +179,29 @@ fun MainScreen(
         ) {
             InstallPermissionCard()
 
-            LazyColumn(
+            PullToRefreshBox(
+                isRefreshing = state.isRefreshing,
+                onRefresh = onRefresh,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(state.trackedRepos, key = { it.fullName }) { repo ->
-                    TrackedRepoCard(
-                        repo = repo,
-                        progress = state.downloadProgress[repo.fullName],
-                        onRefresh = { onCheckForUpdates(repo.owner, repo.name) },
-                        onDownload = { onDownloadAndInstall(repo) },
-                        onDownloadOnWatch = { onDownloadAndInstallOnWatch(repo) },
-                        onDelete = { onRemoveRepo(repo) }
-                    )
-                }
-                item {
-                    Spacer(modifier = Modifier.height(96.dp))
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(state.trackedRepos, key = { it.fullName }) { repo ->
+                        TrackedRepoCard(
+                            repo = repo,
+                            progress = state.downloadProgress[repo.fullName],
+                            onRefresh = { onCheckForUpdates(repo.owner, repo.name) },
+                            onDownload = { onDownloadAndInstall(repo) },
+                            onDownloadOnWatch = { onDownloadAndInstallOnWatch(repo) },
+                            onDelete = { onRemoveRepo(repo) }
+                        )
+                    }
+                    item {
+                        Spacer(modifier = Modifier.height(96.dp))
+                    }
                 }
             }
         }

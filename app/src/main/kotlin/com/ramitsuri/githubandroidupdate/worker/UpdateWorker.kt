@@ -5,10 +5,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.ramitsuri.githubandroidupdate.data.DataStoreManager
 import com.ramitsuri.githubandroidupdate.updatechecker.lib.GitHubUpdateChecker
-import com.ramitsuri.githubandroidupdate.updatechecker.lib.model.GitHubRelease
 import kotlinx.coroutines.flow.first
-import java.io.File
-import kotlin.time.Instant
 
 class UpdateWorker(
     private val context: Context,
@@ -21,43 +18,12 @@ class UpdateWorker(
         val repos = dataStoreManager.trackedRepos.first()
         val updateChecker = GitHubUpdateChecker(context)
 
-        val updatedRepos = repos.map { repo ->
-            val lastTimestamp = repo.latestReleaseTimestamp?.let { Instant.fromEpochMilliseconds(it) }
-            val release = updateChecker.checkForUpdates(
-                owner = repo.owner,
-                repo = repo.name,
-                authToken = pat,
-                lastCheckedTimestamp = lastTimestamp,
-            )
-
-            if (release is GitHubRelease.Release) {
-                val hasUpdate = lastTimestamp != null && release.createdAt > lastTimestamp
-                repo.copy(
-                    latestReleaseVersion = release.name,
-                    latestReleaseTimestamp = release.createdAt.toEpochMilliseconds(),
-                    hasUpdate = hasUpdate,
-                )
-            } else {
-                repo
-            }
-        }
-
+        val updatedRepos = updateChecker.checkForUpdates(repos, pat)
         dataStoreManager.saveTrackedRepos(updatedRepos)
-        
-        cleanupOldDownloads()
+
+        updateChecker.cleanupOldDownloads()
 
         return Result.success()
-    }
-
-    private fun cleanupOldDownloads() {
-        val downloadDir = File(context.cacheDir, "app-download")
-        if (downloadDir.exists() && downloadDir.isDirectory) {
-            downloadDir.listFiles()?.forEach { file ->
-                if (file.isFile) {
-                    file.delete()
-                }
-            }
-        }
     }
 
     companion object {

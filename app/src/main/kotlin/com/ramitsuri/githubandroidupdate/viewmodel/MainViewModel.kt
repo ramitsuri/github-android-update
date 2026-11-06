@@ -24,7 +24,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.concurrent.TimeUnit
-import kotlin.time.Instant
 
 data class MainUiState(
     val pat: String? = null,
@@ -32,6 +31,7 @@ data class MainUiState(
     val selfRepo: TrackedRepo? = null,
     val downloadProgress: Map<String, Float> = emptyMap(),
     val isLoaded: Boolean = false,
+    val isRefreshing: Boolean = false,
 )
 
 class MainViewModel(private val application: Application) : AndroidViewModel(application) {
@@ -39,6 +39,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     private val updateChecker = GitHubUpdateChecker(application.applicationContext)
 
     private val _downloadProgress = MutableStateFlow<Map<String, Float>>(emptyMap())
+    private val _isRefreshing = MutableStateFlow(false)
 
     init {
         viewModelScope.launch {
@@ -51,13 +52,15 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         dataStoreManager.trackedRepos,
         dataStoreManager.selfRepo,
         _downloadProgress,
-    ) { pat, trackedRepos, selfRepo, downloadProgress ->
+        _isRefreshing,
+    ) { pat, trackedRepos, selfRepo, downloadProgress, isRefreshing ->
         MainUiState(
             pat = pat,
             selfRepo = selfRepo,
             trackedRepos = trackedRepos.sortedByDescending { it.hasUpdate },
             downloadProgress = downloadProgress,
-            isLoaded = true
+            isLoaded = true,
+            isRefreshing = isRefreshing,
         )
     }.stateIn(
         viewModelScope,
@@ -96,24 +99,27 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             if (repoIndex == -1) return@launch
 
             val repo = currentRepos[repoIndex]
-            val lastTimestamp = repo.latestReleaseTimestamp?.let { Instant.fromEpochMilliseconds(it) }
-            val release = updateChecker.checkForUpdates(
-                owner = repo.owner,
-                repo = repo.name,
-                authToken = pat,
-                lastCheckedTimestamp = lastTimestamp,
-            )
-
-            if (release is GitHubRelease.Release) {
-                val hasUpdate = lastTimestamp != null && release.createdAt > lastTimestamp
-                val hasWearUpdate = release.hasWearAsset()
-                currentRepos[repoIndex] = repo.copy(
-                    latestReleaseVersion = release.name,
-                    latestReleaseTimestamp = release.createdAt.toEpochMilliseconds(),
-                    hasUpdate = hasUpdate,
-                    hasWearUpdate = hasWearUpdate,
-                )
+            val updatedRepo = updateChecker.checkForUpdates(repo, pat)
+            if (updatedRepo != repo) {
+                currentRepos[repoIndex] = updatedRepo
                 dataStoreManager.saveTrackedRepos(currentRepos)
+            }
+        }
+    }
+
+    fun refreshTrackedRepos() {
+        viewModelScope.launch {
+            if (_isRefreshing.value) return@launch
+            _isRefreshing.value = true
+            try {
+                val pat = uiState.value.pat
+                val currentRepos = uiState.value.trackedRepos
+                val updatedRepos = updateChecker.checkForUpdates(currentRepos, pat)
+                dataStoreManager.saveTrackedRepos(updatedRepos)
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to refresh tracked repos: ${e.message}")
+            } finally {
+                _isRefreshing.value = false
             }
         }
     }
